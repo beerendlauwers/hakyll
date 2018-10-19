@@ -1,5 +1,6 @@
 --------------------------------------------------------------------------------
 -- | Internal module to parse metadata
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE BangPatterns    #-}
 {-# LANGUAGE RecordWildCards #-}
 module Hakyll.Core.Provider.Metadata
@@ -17,6 +18,8 @@ import           Control.Monad                 (guard)
 import qualified Data.ByteString               as B
 import qualified Data.ByteString.Char8         as BC
 import           Data.List.Extended            (breakWhen)
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import qualified Data.Map                      as M
 import           Data.Maybe                    (fromMaybe)
 import           Data.Monoid                   ((<>))
@@ -30,7 +33,7 @@ import           System.IO                     as IO
 
 
 --------------------------------------------------------------------------------
-loadMetadata :: Provider -> Identifier -> IO (Metadata, Maybe String)
+loadMetadata :: Provider -> Identifier -> IO (Metadata, Maybe T.Text)
 loadMetadata p identifier = do
     hasHeader  <- probablyHasMetadataHeader fp
     (md, body) <- if hasHeader
@@ -49,9 +52,9 @@ loadMetadata p identifier = do
 
 
 --------------------------------------------------------------------------------
-loadMetadataHeader :: FilePath -> IO (Metadata, String)
+loadMetadataHeader :: FilePath -> IO (Metadata, T.Text)
 loadMetadataHeader fp = do
-    fileContent <- readFile fp
+    fileContent <- TIO.readFile fp
     case parsePage fileContent of
         Right x   -> return x
         Left  err -> throwIO $ MetadataException fp err
@@ -82,40 +85,34 @@ probablyHasMetadataHeader fp = do
 
 --------------------------------------------------------------------------------
 -- | Parse the page metadata and body.
-splitMetadata :: String -> (Maybe String, String)
+splitMetadata :: T.Text -> (Maybe T.Text, T.Text)
 splitMetadata str0 = fromMaybe (Nothing, str0) $ do
     guard $ leading >= 3
-    let !str1 = drop leading str0
-    guard $ all isNewline (take 1 str1)
-    let !(!meta, !content0) = breakWhen isTrailing str1
-    guard $ not $ null content0
-    let !content1 = drop (leading + 1) content0
-        !content2 = dropWhile isNewline $ dropWhile isInlineSpace content1
+    let !str1 = T.drop leading str0
+    guard $ T.all isNewline (T.take 1 str1)
+    let !(!meta, !content0) = T.breakOn (T.replicate leading "-") str1
+    guard $ not $ T.null content0
+    let !content1 = T.drop (leading + 1) content0
+        !content2 = T.dropWhile isNewline $ T.dropWhile isInlineSpace content1
     -- Adding this newline fixes the line numbers reported by the YAML parser.
     -- It's a bit ugly but it works.
-    return (Just ('\n' : meta), content2)
+    return (Just ("\n" `T.append` meta), content2)
   where
     -- Parse the leading "---"
-    !leading = length $ takeWhile (== '-') str0
-
-    -- Predicate to recognize the trailing "---" or "..."
-    isTrailing []       = False
-    isTrailing (x : xs) =
-        isNewline x && length (takeWhile isDash xs) == leading
+    !leading = T.length $ T.takeWhile (== '-') str0
 
     -- Characters
     isNewline     c = c == '\n' || c == '\r'
-    isDash        c = c == '-'  || c == '.'
     isInlineSpace c = c == '\t' || c == ' '
 
 
 --------------------------------------------------------------------------------
-parseMetadata :: String -> Either Yaml.ParseException Metadata
-parseMetadata = Yaml.decodeEither' . T.encodeUtf8 . T.pack
+parseMetadata :: T.Text -> Either Yaml.ParseException Metadata
+parseMetadata = Yaml.decodeEither' . T.encodeUtf8
 
 
 --------------------------------------------------------------------------------
-parsePage :: String -> Either Yaml.ParseException (Metadata, String)
+parsePage :: T.Text -> Either Yaml.ParseException (Metadata, T.Text)
 parsePage fileContent = case mbMetaBlock of
     Nothing        -> return (mempty, content)
     Just metaBlock -> case parseMetadata metaBlock of
