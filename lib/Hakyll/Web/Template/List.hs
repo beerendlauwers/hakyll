@@ -8,6 +8,7 @@
 --
 -- * A sitemap
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Web.Template.List
     ( applyTemplateList
     , applyJoinTemplateList
@@ -23,6 +24,7 @@ import           Control.Monad               (liftM)
 import           Data.List                   (intersperse, sortBy)
 import           Data.Ord                    (comparing)
 import           Data.Time.Locale.Compat     (defaultTimeLocale)
+import qualified Data.Text as T
 
 
 --------------------------------------------------------------------------------
@@ -40,21 +42,21 @@ import           Hakyll.Web.Template.Context
 applyTemplateList :: Template
                   -> Context a
                   -> [Item a]
-                  -> Compiler String
+                  -> Compiler T.Text
 applyTemplateList = applyJoinTemplateList ""
 
 
 --------------------------------------------------------------------------------
 -- | Join a listing of pages with a string in between, after applying a template
 -- to each page.
-applyJoinTemplateList :: String
+applyJoinTemplateList :: T.Text
                       -> Template
                       -> Context a
                       -> [Item a]
-                      -> Compiler String
+                      -> Compiler T.Text
 applyJoinTemplateList delimiter tpl context items = do
     items' <- mapM (applyTemplate tpl context) items
-    return $ concat $ intersperse delimiter $ map itemBody items'
+    return $ T.intercalate delimiter $ map itemBody items'
 
 
 --------------------------------------------------------------------------------

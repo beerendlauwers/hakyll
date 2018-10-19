@@ -1,5 +1,6 @@
 --------------------------------------------------------------------------------
 -- | Provides utilities to manipulate HTML pages
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Web.Html
     ( -- * Generic
       withTags
@@ -25,6 +26,7 @@ module Hakyll.Web.Html
 import           Data.Char                       (digitToInt, intToDigit,
                                                   isDigit, toLower)
 import           Data.List                       (isPrefixOf)
+import qualified Data.Text as T
 import qualified Data.Set                        as S
 import           System.FilePath.Posix           (joinPath, splitPath,
                                                   takeDirectory)
@@ -36,19 +38,19 @@ import           Network.URI                     (isUnreserved, escapeURIString)
 
 --------------------------------------------------------------------------------
 -- | Map over all tags in the document
-withTags :: (TS.Tag String -> TS.Tag String) -> String -> String
+withTags :: (TS.Tag T.Text -> TS.Tag T.Text) -> T.Text -> T.Text
 withTags = withTagList . map
 
 -- | Map over all tags (as list) in the document
-withTagList :: ([TS.Tag String] -> [TS.Tag String]) -> String -> String
+withTagList :: ([TS.Tag T.Text] -> [TS.Tag T.Text]) -> T.Text -> T.Text
 withTagList f = renderTags' . f . parseTags'
 
 --------------------------------------------------------------------------------
 -- | Map every @h1@ to an @h2@, @h2@ to @h3@, etc.
-demoteHeaders :: String -> String
+demoteHeaders :: T.Text -> T.Text
 demoteHeaders = withTags $ \tag -> case tag of
-    TS.TagOpen t a -> TS.TagOpen (demote t) a
-    TS.TagClose t  -> TS.TagClose (demote t)
+    TS.TagOpen t a -> TS.TagOpen (T.pack $ demote $ T.unpack t) a
+    TS.TagClose t  -> TS.TagClose (T.pack $ demote $ T.unpack t)
     t              -> t
   where
     demote t@['h', n]
@@ -58,18 +60,18 @@ demoteHeaders = withTags $ \tag -> case tag of
 
 
 --------------------------------------------------------------------------------
-isUrlAttribute :: String -> Bool
+isUrlAttribute :: T.Text -> Bool
 isUrlAttribute = (`elem` ["src", "href", "data", "poster"])
 
 
 --------------------------------------------------------------------------------
-getUrls :: [TS.Tag String] -> [String]
+getUrls :: [TS.Tag T.Text] -> [T.Text]
 getUrls tags = [v | TS.TagOpen _ as <- tags, (k, v) <- as, isUrlAttribute k]
 
 
 --------------------------------------------------------------------------------
 -- | Apply a function to each URL on a webpage
-withUrls :: (String -> String) -> String -> String
+withUrls :: (T.Text -> T.Text) -> T.Text -> T.Text
 withUrls f = withTags tag
   where
     tag (TS.TagOpen s a) = TS.TagOpen s $ map attr a
@@ -80,10 +82,10 @@ withUrls f = withTags tag
 --------------------------------------------------------------------------------
 -- | Customized TagSoup renderer. The default TagSoup renderer escape CSS
 -- within style tags, and doesn't properly minimize.
-renderTags' :: [TS.Tag String] -> String
+renderTags' :: [TS.Tag T.Text] -> T.Text
 renderTags' = TS.renderTagsOptions TS.RenderOptions
-    { TS.optRawTag   = (`elem` ["script", "style"]) . map toLower
-    , TS.optMinimize = (`S.member` minimize) . map toLower
+    { TS.optRawTag   = (`elem` ["script", "style"]) . T.toLower
+    , TS.optMinimize = (`S.member` minimize) . T.toLower
     , TS.optEscape   = id
     }
   where
@@ -96,10 +98,10 @@ renderTags' = TS.renderTagsOptions TS.RenderOptions
 
 --------------------------------------------------------------------------------
 -- | Customized TagSoup parser: do not decode any entities.
-parseTags' :: String -> [TS.Tag String]
-parseTags' = TS.parseTagsOptions (TS.parseOptions :: TS.ParseOptions String)
-    { TS.optEntityData   = \(str, b) -> [TS.TagText $ "&" ++ str ++ [';' | b]]
-    , TS.optEntityAttrib = \(str, b) -> ("&" ++ str ++ [';' | b], [])
+parseTags' :: T.Text -> [TS.Tag T.Text]
+parseTags' = TS.parseTagsOptions (TS.parseOptions :: TS.ParseOptions T.Text)
+    { TS.optEntityData   = \(str, b) -> [TS.TagText $ "&" `T.append` str `T.append` T.pack [';' | b]]
+    , TS.optEntityAttrib = \(str, b) -> ("&" `T.append` str `T.append` T.pack [';' | b], [])
     }
 
 

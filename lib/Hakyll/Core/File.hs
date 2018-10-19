@@ -23,6 +23,7 @@ import           System.Directory              (doesFileExist,
                                                 renameFile)
 import           System.FilePath               ((</>))
 import           System.Random                 (randomIO)
+import qualified Data.Text as T
 
 
 --------------------------------------------------------------------------------
@@ -82,12 +83,12 @@ newTmpFile :: String            -- ^ Suffix and extension
 newTmpFile suffix = do
     path <- mkPath
     compilerUnsafeIO $ makeDirectories path
-    debugCompiler $ "newTmpFile " ++ path
+    debugCompiler $ T.pack $ "newTmpFile " ++ path
     return $ TmpFile path
   where
     mkPath = do
         rand <- compilerUnsafeIO $ randomIO :: Compiler Int
         tmp  <- tmpDirectory . compilerConfig <$> compilerAsk
-        let path = tmp </> Store.hash [show rand] ++ "-" ++ suffix
+        let path = tmp </> (T.unpack $ Store.hash [T.pack $ show rand]) ++ "-" ++ suffix
         exists <- compilerUnsafeIO $ doesFileExist path
         if exists then mkPath else return path

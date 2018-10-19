@@ -33,14 +33,14 @@ type Metadata = Yaml.Object
 
 
 --------------------------------------------------------------------------------
-lookupString :: String -> Metadata -> Maybe String
-lookupString key meta = HMS.lookup (T.pack key) meta >>= Yaml.toString
+lookupString :: T.Text -> Metadata -> Maybe T.Text
+lookupString key meta = HMS.lookup key meta >>= Yaml.toString
 
 
 --------------------------------------------------------------------------------
-lookupStringList :: String -> Metadata -> Maybe [String]
+lookupStringList :: T.Text -> Metadata -> Maybe [T.Text]
 lookupStringList key meta =
-    HMS.lookup (T.pack key) meta >>= Yaml.toList >>= mapM Yaml.toString
+    HMS.lookup key meta >>= Yaml.toList >>= mapM Yaml.toString
 
 
 --------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ class Monad m => MonadMetadata m where
 
 
 --------------------------------------------------------------------------------
-getMetadataField :: MonadMetadata m => Identifier -> String -> m (Maybe String)
+getMetadataField :: MonadMetadata m => Identifier -> T.Text -> m (Maybe T.Text)
 getMetadataField identifier key = do
     metadata <- getMetadata identifier
     return $ lookupString key metadata
@@ -66,7 +66,7 @@ getMetadataField identifier key = do
 --------------------------------------------------------------------------------
 -- | Version of 'getMetadataField' which throws an error if the field does not
 -- exist.
-getMetadataField' :: MonadMetadata m => Identifier -> String -> m String
+getMetadataField' :: MonadMetadata m => Identifier -> T.Text -> m T.Text
 getMetadataField' identifier key = do
     field <- getMetadataField identifier key
     case field of

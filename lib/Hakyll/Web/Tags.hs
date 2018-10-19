@@ -71,6 +71,7 @@ import qualified Data.Map                        as M
 import           Data.Maybe                      (catMaybes, fromMaybe)
 import           Data.Ord                        (comparing)
 import qualified Data.Set                        as S
+import qualified Data.Text                       as T
 import           System.FilePath                 (takeBaseName, takeDirectory)
 import           Text.Blaze.Html                 (toHtml, toValue, (!))
 import           Text.Blaze.Html.Renderer.String (renderHtml)
@@ -94,8 +95,8 @@ import           Hakyll.Web.Template.Context
 --------------------------------------------------------------------------------
 -- | Data about tags
 data Tags = Tags
-    { tagsMap        :: [(String, [Identifier])]
-    , tagsMakeId     :: String -> Identifier
+    { tagsMap        :: [(T.Text, [Identifier])]
+    , tagsMakeId     :: T.Text -> Identifier
     , tagsDependency :: Dependency
     }
 
@@ -103,26 +104,24 @@ data Tags = Tags
 --------------------------------------------------------------------------------
 -- | Obtain tags from a page in the default way: parse them from the @tags@
 -- metadata field. This can either be a list or a comma-separated string.
-getTags :: MonadMetadata m => Identifier -> m [String]
+getTags :: MonadMetadata m => Identifier -> m [T.Text]
 getTags identifier = do
     metadata <- getMetadata identifier
-    return $ fromMaybe [] $
-        (lookupStringList "tags" metadata) `mplus`
-        (map trim . splitAll "," <$> lookupString "tags" metadata)
+    return $ fromMaybe [] (lookupStringList "tags" metadata)
 
 
 --------------------------------------------------------------------------------
 -- | Obtain categories from a page.
-getCategory :: MonadMetadata m => Identifier -> m [String]
-getCategory = return . return . takeBaseName . takeDirectory . toFilePath
+getCategory :: MonadMetadata m => Identifier -> m [T.Text]
+getCategory = return . return . T.pack . takeBaseName . takeDirectory . toFilePath
 
 
 --------------------------------------------------------------------------------
 -- | Higher-order function to read tags
 buildTagsWith :: MonadMetadata m
-              => (Identifier -> m [String])
+              => (Identifier -> m [T.Text])
               -> Pattern
-              -> (String -> Identifier)
+              -> (T.Text -> Identifier)
               -> m Tags
 buildTagsWith f pattern makeId = do
     ids    <- getMatches pattern
@@ -138,18 +137,18 @@ buildTagsWith f pattern makeId = do
 
 
 --------------------------------------------------------------------------------
-buildTags :: MonadMetadata m => Pattern -> (String -> Identifier) -> m Tags
+buildTags :: MonadMetadata m => Pattern -> (T.Text -> Identifier) -> m Tags
 buildTags = buildTagsWith getTags
 
 
 --------------------------------------------------------------------------------
-buildCategories :: MonadMetadata m => Pattern -> (String -> Identifier)
+buildCategories :: MonadMetadata m => Pattern -> (T.Text -> Identifier)
                 -> m Tags
 buildCategories = buildTagsWith getCategory
 
 
 --------------------------------------------------------------------------------
-tagsRules :: Tags -> (String -> Pattern -> Rules ()) -> Rules ()
+tagsRules :: Tags -> (T.Text -> Pattern -> Rules ()) -> Rules ()
 tagsRules tags rules =
     forM_ (tagsMap tags) $ \(tag, identifiers) ->
         rulesExtraDependencies [tagsDependency tags] $
@@ -170,7 +169,7 @@ renderTags makeHtml concatHtml tags = do
     -- In tags' we create a list: [((tag, route), count)]
     tags' <- forM (tagsMap tags) $ \(tag, ids) -> do
         route' <- getRoute $ tagsMakeId tags tag
-        return ((tag, route'), length ids)
+        return ((T.unpack tag, route'), length ids)
 
     -- TODO: We actually need to tell a dependency here!
 
@@ -198,7 +197,7 @@ renderTagCloud :: Double
                -- ^ Biggest font size, in percent
                -> Tags
                -- ^ Input tags
-               -> Compiler String
+               -> Compiler String 
                -- ^ Rendered cloud
 renderTagCloud = renderTagCloudWith makeLink (intercalate " ")
   where
@@ -234,7 +233,7 @@ renderTagCloudWith makeLink cat minSize maxSize =
 
 --------------------------------------------------------------------------------
 -- | Render a tag cloud in HTML as a context
-tagCloudField :: String
+tagCloudField :: T.Text
                -- ^ Destination key
                -> Double
                -- ^ Smallest font size, in percent
@@ -245,12 +244,12 @@ tagCloudField :: String
                -> Context a
                -- ^ Context
 tagCloudField key minSize maxSize tags =
-  field key $ \_ -> renderTagCloud minSize maxSize tags
+  field key $ \_ -> T.pack <$> renderTagCloud minSize maxSize tags
 
 
 --------------------------------------------------------------------------------
 -- | Render a tag cloud in HTML as a context
-tagCloudFieldWith :: String
+tagCloudFieldWith :: T.Text
                   -- ^ Destination key
                   -> (Double -> Double ->
                       String -> String -> Int -> Int -> Int -> String)
@@ -266,7 +265,7 @@ tagCloudFieldWith :: String
                   -> Context a
                   -- ^ Context
 tagCloudFieldWith key makeLink cat minSize maxSize tags =
-  field key $ \_ -> renderTagCloudWith makeLink cat minSize maxSize tags
+  field key $ \_ -> T.pack <$> renderTagCloudWith makeLink cat minSize maxSize tags
 
 
 --------------------------------------------------------------------------------
@@ -282,13 +281,13 @@ renderTagList = renderTags makeLink (intercalate ", ")
 --------------------------------------------------------------------------------
 -- | Render tags with links with custom functions to get tags and to
 -- render links
-tagsFieldWith :: (Identifier -> Compiler [String])
+tagsFieldWith :: (Identifier -> Compiler [T.Text])
               -- ^ Get the tags
-              -> (String -> (Maybe FilePath) -> Maybe H.Html)
+              -> (T.Text -> (Maybe FilePath) -> Maybe H.Html)
               -- ^ Render link for one tag
               -> ([H.Html] -> H.Html)
               -- ^ Concatenate tag links
-              -> String
+              -> T.Text
               -- ^ Destination field
               -> Tags
               -- ^ Tags structure
@@ -300,12 +299,12 @@ tagsFieldWith getTags' renderLink cat key tags = field key $ \item -> do
         route' <- getRoute $ tagsMakeId tags tag
         return $ renderLink tag route'
 
-    return $ renderHtml $ cat $ catMaybes $ links
+    return $ T.pack $ renderHtml $ cat $ catMaybes $ links
 
 
 --------------------------------------------------------------------------------
 -- | Render tags with links
-tagsField :: String     -- ^ Destination key
+tagsField :: T.Text     -- ^ Destination key
           -> Tags       -- ^ Tags
           -> Context a  -- ^ Context
 tagsField =
@@ -314,7 +313,7 @@ tagsField =
 
 --------------------------------------------------------------------------------
 -- | Render the category in a link
-categoryField :: String     -- ^ Destination key
+categoryField :: T.Text     -- ^ Destination key
               -> Tags       -- ^ Tags
               -> Context a  -- ^ Context
 categoryField =
@@ -323,16 +322,16 @@ categoryField =
 
 --------------------------------------------------------------------------------
 -- | Render one tag link
-simpleRenderLink :: String -> (Maybe FilePath) -> Maybe H.Html
+simpleRenderLink :: T.Text -> (Maybe FilePath) -> Maybe H.Html
 simpleRenderLink _   Nothing         = Nothing
 simpleRenderLink tag (Just filePath) =
-  Just $ H.a ! A.href (toValue $ toUrl filePath) $ toHtml tag
+  Just $ H.a ! A.href (toValue $ toUrl filePath) $ toHtml $ T.unpack tag
 
 
 --------------------------------------------------------------------------------
 -- | Sort tags using supplied function. First element of the tuple passed to
 -- the comparing function is the actual tag name.
-sortTagsBy :: ((String, [Identifier]) -> (String, [Identifier]) -> Ordering)
+sortTagsBy :: ((T.Text, [Identifier]) -> (T.Text, [Identifier]) -> Ordering)
            -> Tags -> Tags
 sortTagsBy f t = t {tagsMap = sortBy f (tagsMap t)}
 

@@ -2,6 +2,8 @@
 -- | Module containing the elements used in a template.  A template is generally
 -- just a list of these elements.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
+
 module Hakyll.Web.Template.Internal.Element
     ( TemplateKey (..)
     , TemplateExpr (..)
@@ -19,9 +21,10 @@ import           Data.Binary             (Binary, get, getWord8, put, putWord8)
 import           Data.List               (intercalate)
 import           Data.Maybe              (isJust)
 import           Data.Typeable           (Typeable)
+import qualified Data.Text               as T
 import           GHC.Exts                (IsString (..))
 import qualified Text.Parsec             as P
-import qualified Text.Parsec.String      as P
+import qualified Text.Parsec.Text        as P
 
 
 --------------------------------------------------------------------------------
@@ -29,13 +32,13 @@ import           Hakyll.Core.Util.Parser
 
 
 --------------------------------------------------------------------------------
-newtype TemplateKey = TemplateKey String
+newtype TemplateKey = TemplateKey T.Text
     deriving (Binary, Show, Eq, Typeable)
 
 
 --------------------------------------------------------------------------------
 instance IsString TemplateKey where
-    fromString = TemplateKey
+    fromString = TemplateKey . T.pack
 
 
 --------------------------------------------------------------------------------
@@ -83,15 +86,15 @@ instance Binary TemplateElement where
 data TemplateExpr
     = Ident TemplateKey
     | Call TemplateKey [TemplateExpr]
-    | StringLiteral String
+    | StringLiteral T.Text
     deriving (Eq, Typeable)
 
 
 --------------------------------------------------------------------------------
 instance Show TemplateExpr where
-    show (Ident (TemplateKey k))   = k
+    show (Ident (TemplateKey k))   = show k
     show (Call (TemplateKey k) as) =
-        k ++ "(" ++ intercalate ", " (map show as) ++ ")"
+        show k ++ "(" ++ intercalate ", " (map show as) ++ ")"
     show (StringLiteral s)         = show s
 
 
@@ -109,12 +112,12 @@ instance Binary TemplateExpr where
 
 
 --------------------------------------------------------------------------------
-readTemplateElems :: String -> [TemplateElement]
+readTemplateElems :: T.Text -> [TemplateElement]
 readTemplateElems = readTemplateElemsFile "{literal}"
 
 
 --------------------------------------------------------------------------------
-readTemplateElemsFile :: FilePath -> String -> [TemplateElement]
+readTemplateElemsFile :: FilePath -> T.Text -> [TemplateElement]
 readTemplateElemsFile file input = case P.parse templateElems file input of
     Left err -> error $ "Cannot parse template: " ++ show err
     Right t  -> t
@@ -279,7 +282,7 @@ stringLiteral = do
         x <- P.noneOf "\""
         if x == '\\' then P.anyChar else return x
     void $ P.char '\"'
-    return $ StringLiteral str
+    return $ StringLiteral (T.pack str)
 
 
 --------------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 --------------------------------------------------------------------------------
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Core.Compiler.Require
     ( Snapshot
     , save
@@ -16,6 +17,7 @@ module Hakyll.Core.Compiler.Require
 import           Control.Monad                  (when)
 import           Data.Binary                    (Binary)
 import qualified Data.Set                       as S
+import qualified Data.Text as T
 import           Data.Typeable
 
 
@@ -72,12 +74,12 @@ loadSnapshot id' snapshot = do
   where
     notFound =
         "Hakyll.Core.Compiler.Require.load: " ++ show id' ++
-        " (snapshot " ++ snapshot ++ ") was not found in the cache, " ++
+        " (snapshot " ++ (T.unpack snapshot) ++ ") was not found in the cache, " ++
         "the cache might be corrupted or " ++
         "the item you are referring to might not exist"
     wrongType e r =
         "Hakyll.Core.Compiler.Require.load: " ++ show id' ++
-        " (snapshot " ++ snapshot ++ ") was found in the cache, " ++
+        " (snapshot " ++ (T.unpack snapshot) ++ ") was found in the cache, " ++
         "but does not have the right type: expected " ++ show e ++
         " but got " ++ show r
 
@@ -111,9 +113,9 @@ loadAllSnapshots pattern snapshot = do
 
 
 --------------------------------------------------------------------------------
-key :: Identifier -> String -> [String]
+key :: Identifier -> T.Text -> [T.Text]
 key identifier snapshot =
-    ["Hakyll.Core.Compiler.Require", show identifier, snapshot]
+    ["Hakyll.Core.Compiler.Require", T.pack $ show identifier, snapshot]
 
 
 --------------------------------------------------------------------------------

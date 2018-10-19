@@ -8,6 +8,7 @@ module Hakyll.Preview.Server
 
 --------------------------------------------------------------------------------
 import           Data.String
+import qualified Data.Text as T
 import qualified Network.Wai.Handler.Warp       as Warp
 import qualified Network.Wai.Application.Static as Static
 import qualified Network.Wai                    as Wai
@@ -23,7 +24,7 @@ staticServer :: Logger               -- ^ Logger
              -> Int                  -- ^ Port to listen on
              -> IO ()                -- ^ Blocks forever
 staticServer logger directory host port = do
-    Logger.header logger $ "Listening on http://" ++ host ++ ":" ++ show port
+    Logger.header logger $ T.pack $ "Listening on http://" ++ host ++ ":" ++ show port
     Warp.runSettings warpSettings $
         Static.staticApp (Static.defaultFileServerSettings directory)
   where

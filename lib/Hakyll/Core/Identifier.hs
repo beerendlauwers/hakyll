@@ -68,7 +68,6 @@ fromFilePath = Identifier Nothing .
   where
     split' = map dropTrailingPathSeparator . splitPath
 
-
 --------------------------------------------------------------------------------
 -- | Convert an identifier to a relative 'FilePath'
 toFilePath :: Identifier -> FilePath

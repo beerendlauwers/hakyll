@@ -1,4 +1,5 @@
  --------------------------------------------------------------------------------
+{-# LANGUAGE OverloadedStrings          #-}
 -- | Implementation of Hakyll commands: build, preview...
 {-# LANGUAGE CPP #-}
 module Hakyll.Commands
@@ -17,6 +18,7 @@ module Hakyll.Commands
 --------------------------------------------------------------------------------
 import           Control.Concurrent
 import           System.Exit                (ExitCode)
+import qualified Data.Text as T
 
 
 --------------------------------------------------------------------------------
@@ -67,7 +69,7 @@ clean conf logger = do
     remove $ tmpDirectory conf
   where
     remove dir = do
-        Logger.header logger $ "Removing " ++ dir ++ "..."
+        Logger.header logger $ "Removing " `T.append` T.pack dir `T.append` "..."
         removeDirectory dir
 
 

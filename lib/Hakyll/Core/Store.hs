@@ -2,6 +2,7 @@
 -- | A store for storing and retreiving items
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Core.Store
     ( Store
     , Result (..)
@@ -17,9 +18,11 @@ module Hakyll.Core.Store
 
 --------------------------------------------------------------------------------
 import           Control.Exception    (IOException, handle)
+import qualified Crypto.Hash          as Crypto
 import qualified Crypto.Hash.MD5      as MD5
 import           Data.Binary          (Binary, decode, encodeFile)
 import qualified Data.ByteString      as B
+import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Cache.LRU.IO    as Lru
 import           Data.List            (intercalate)
@@ -38,13 +41,14 @@ import           Text.Printf          (printf)
 -- | Simple wrapper type
 data Box = forall a. Typeable a => Box a
 
+type TextFilePath = T.Text
 
 --------------------------------------------------------------------------------
 data Store = Store
     { -- | All items are stored on the filesystem
       storeDirectory :: FilePath
     , -- | Optionally, items are also kept in-memory
-      storeMap       :: Maybe (Lru.AtomicLRU FilePath Box)
+      storeMap       :: Maybe (Lru.AtomicLRU TextFilePath Box)
     }
 
 
@@ -87,7 +91,7 @@ new inMemory directory = do
 
 --------------------------------------------------------------------------------
 -- | Auxiliary: add an item to the in-memory cache
-cacheInsert :: Typeable a => Store -> String -> a -> IO ()
+cacheInsert :: Typeable a => Store -> T.Text -> a -> IO ()
 cacheInsert (Store _ Nothing)    _   _     = return ()
 cacheInsert (Store _ (Just lru)) key x =
     Lru.insert key (Box x) lru
@@ -95,7 +99,7 @@ cacheInsert (Store _ (Just lru)) key x =
 
 --------------------------------------------------------------------------------
 -- | Auxiliary: get an item from the in-memory cache
-cacheLookup :: forall a. Typeable a => Store -> String -> IO (Result a)
+cacheLookup :: forall a. Typeable a => Store -> T.Text -> IO (Result a)
 cacheLookup (Store _ Nothing)    _   = return NotFound
 cacheLookup (Store _ (Just lru)) key = do
     res <- Lru.lookup key lru
@@ -107,14 +111,14 @@ cacheLookup (Store _ (Just lru)) key = do
 
 
 --------------------------------------------------------------------------------
-cacheIsMember :: Store -> String -> IO Bool
+cacheIsMember :: Store -> T.Text -> IO Bool
 cacheIsMember (Store _ Nothing)    _   = return False
 cacheIsMember (Store _ (Just lru)) key = isJust <$> Lru.lookup key lru
 
 
 --------------------------------------------------------------------------------
 -- | Auxiliary: delete an item from the in-memory cache
-cacheDelete :: Store -> String -> IO ()
+cacheDelete :: Store -> T.Text -> IO ()
 cacheDelete (Store _ Nothing)    _   = return ()
 cacheDelete (Store _ (Just lru)) key = do
     _ <- Lru.delete key lru
@@ -123,9 +127,9 @@ cacheDelete (Store _ (Just lru)) key = do
 
 --------------------------------------------------------------------------------
 -- | Store an item
-set :: (Binary a, Typeable a) => Store -> [String] -> a -> IO ()
+set :: (Binary a, Typeable a) => Store -> [T.Text] -> a -> IO ()
 set store identifier value = do
-    encodeFile (storeDirectory store </> key) value
+    encodeFile (storeDirectory store </> (T.unpack key)) value
     cacheInsert store key value
   where
     key = hash identifier
@@ -133,7 +137,7 @@ set store identifier value = do
 
 --------------------------------------------------------------------------------
 -- | Load an item
-get :: (Binary a, Typeable a) => Store -> [String] -> IO (Result a)
+get :: (Binary a, Typeable a) => Store -> [T.Text] -> IO (Result a)
 get store identifier = do
     -- First check the in-memory map
     ref <- cacheLookup store key
@@ -153,7 +157,7 @@ get store identifier = do
         s -> return s
   where
     key  = hash identifier
-    path = storeDirectory store </> key
+    path = storeDirectory store </> (T.unpack key)
 
     -- 'decodeFile' from Data.Binary which closes the file ASAP
     decodeClose = do
@@ -165,21 +169,21 @@ get store identifier = do
 
 --------------------------------------------------------------------------------
 -- | Strict function
-isMember :: Store -> [String] -> IO Bool
+isMember :: Store -> [T.Text] -> IO Bool
 isMember store identifier = do
     inCache <- cacheIsMember store key
     if inCache then return True else doesFileExist path
   where
     key  = hash identifier
-    path = storeDirectory store </> key
+    path = storeDirectory store </> (T.unpack key)
 
 
 --------------------------------------------------------------------------------
 -- | Delete an item
-delete :: Store -> [String] -> IO ()
+delete :: Store -> [T.Text] -> IO ()
 delete store identifier = do
     cacheDelete store key
-    deleteFile $ storeDirectory store </> key
+    deleteFile $ storeDirectory store </> (T.unpack key)
   where
     key  = hash identifier
 
@@ -192,6 +196,6 @@ deleteFile = handle (\(_ :: IOException) -> return ()) . removeFile
 
 --------------------------------------------------------------------------------
 -- | Mostly meant for internal usage
-hash :: [String] -> String
-hash = concatMap (printf "%02x") . B.unpack .
-    MD5.hash . T.encodeUtf8 . T.pack . intercalate "/"
+hash :: [T.Text] -> T.Text
+hash = T.decodeUtf8 . B.concat . BL.toChunks . BB.toLazyByteString . BB.byteStringHex .
+    MD5.hash . T.encodeUtf8 . T.intercalate "/"

@@ -14,6 +14,7 @@
 -- will result in (suppose your blogpost is located at @\/posts\/foo.html@:
 --
 -- > <img src="../images/lolcat.png" alt="Funny zomgroflcopter" />
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Web.Html.RelativizeUrls
     ( relativizeUrls
     , relativizeUrlsWith
@@ -21,7 +22,7 @@ module Hakyll.Web.Html.RelativizeUrls
 
 
 --------------------------------------------------------------------------------
-import           Data.List            (isPrefixOf)
+import qualified Data.Text as T
 
 
 --------------------------------------------------------------------------------
@@ -33,20 +34,20 @@ import           Hakyll.Web.Html
 --------------------------------------------------------------------------------
 -- | Compiler form of 'relativizeUrls' which automatically picks the right root
 -- path
-relativizeUrls :: Item String -> Compiler (Item String)
+relativizeUrls :: Item T.Text -> Compiler (Item T.Text)
 relativizeUrls item = do
     route <- getRoute $ itemIdentifier item
     return $ case route of
         Nothing -> item
-        Just r  -> fmap (relativizeUrlsWith $ toSiteRoot r) item
+        Just r  -> fmap (relativizeUrlsWith $ T.pack $ toSiteRoot r) item
 
 
 --------------------------------------------------------------------------------
 -- | Relativize URL's in HTML
-relativizeUrlsWith :: String  -- ^ Path to the site root
-                   -> String  -- ^ HTML to relativize
-                   -> String  -- ^ Resulting HTML
+relativizeUrlsWith :: T.Text  -- ^ Path to the site root
+                   -> T.Text  -- ^ HTML to relativize
+                   -> T.Text  -- ^ Resulting HTML
 relativizeUrlsWith root = withUrls rel
   where
-    isRel x = "/" `isPrefixOf` x && not ("//" `isPrefixOf` x)
-    rel x   = if isRel x then root ++ x else x
+    isRel x = "/" ` T.isPrefixOf` x && not ("//" `T.isPrefixOf` x)
+    rel x   = if isRel x then root `T.append` x else x

@@ -15,6 +15,7 @@ import           Control.Applicative            (empty)
 import           Control.Monad                  (forM_, forM)
 import qualified Data.Map                       as M
 import qualified Data.Set                       as S
+import qualified Data.Text                      as T
 
 
 --------------------------------------------------------------------------------
@@ -118,7 +119,7 @@ paginateContext pag currentPage = mconcat
     , field "lastPageUrl"     $ \_ -> otherPage lastPage          >>= url
     , field "currentPageNum"  $ \i -> thisPage i                  >>= num
     , field "currentPageUrl"  $ \i -> thisPage i                  >>= url
-    , constField "numPages"   $ show $ paginateNumPages pag
+    , constField "numPages"   $ T.pack $ show $ paginateNumPages pag
     , Context $ \k _ i -> case k of
         "allPages" -> do
             let ctx =
@@ -144,10 +145,10 @@ paginateContext pag currentPage = mconcat
             Nothing -> fail $ "No such page: " ++ show n
             Just i  -> return (n, i)
 
-    num :: (Int, Identifier) -> Compiler String
-    num = return . show . fst
+    num :: (Int, Identifier) -> Compiler T.Text
+    num = return . T.pack . show . fst
 
-    url :: (Int, Identifier) -> Compiler String
-    url (n, i) = getRoute i >>= \mbR -> case mbR of
+    url :: (Int, Identifier) -> Compiler T.Text
+    url (n, i) = getRoute i >>= \mbR -> T.pack <$> case mbR of
         Just r  -> return $ toUrl r
         Nothing -> fail $ "No URL for page: " ++ show n

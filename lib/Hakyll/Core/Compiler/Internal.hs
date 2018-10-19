@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Core.Compiler.Internal
     ( -- * Types
       Snapshot
@@ -33,6 +34,7 @@ import           Control.Applicative            (Alternative (..))
 import           Control.Exception              (SomeException, handle)
 import           Control.Monad                  (forM_)
 import           Control.Monad.Except            (MonadError (..))
+import qualified Data.Text as T
 #if MIN_VERSION_base(4,9,0)
 import           Data.Semigroup                 (Semigroup (..))
 #endif
@@ -56,7 +58,7 @@ import           Hakyll.Core.Store
 --------------------------------------------------------------------------------
 -- | Whilst compiling an item, it possible to save multiple snapshots of it, and
 -- not just the final result.
-type Snapshot = String
+type Snapshot = T.Text
 
 
 --------------------------------------------------------------------------------
@@ -107,7 +109,7 @@ instance Monoid CompilerWrite where
 data CompilerResult a where
     CompilerDone     :: a -> CompilerWrite -> CompilerResult a
     CompilerSnapshot :: Snapshot -> Compiler a -> CompilerResult a
-    CompilerError    :: [String] -> CompilerResult a
+    CompilerError    :: [T.Text] -> CompilerResult a
     CompilerRequire  :: (Identifier, Snapshot) -> Compiler a -> CompilerResult a
 
 
@@ -156,7 +158,7 @@ instance Monad Compiler where
             CompilerRequire i c'  -> return $ CompilerRequire i (c' >>= f)
     {-# INLINE (>>=) #-}
 
-    fail = compilerThrow . return
+    fail = compilerThrow . return . T.pack
     {-# INLINE fail #-}
 
 
@@ -176,7 +178,7 @@ instance MonadMetadata Compiler where
 
 
 --------------------------------------------------------------------------------
-instance MonadError [String] Compiler where
+instance MonadError [T.Text] Compiler where
   throwError = compilerThrow
   catchError = compilerCatch
 
@@ -186,7 +188,7 @@ runCompiler :: Compiler a -> CompilerRead -> IO (CompilerResult a)
 runCompiler compiler read' = handle handler $ unCompiler compiler read'
   where
     handler :: SomeException -> IO (CompilerResult a)
-    handler e = return $ CompilerError [show e]
+    handler e = return $ CompilerError [T.pack $ show e]
 
 
 --------------------------------------------------------------------------------
@@ -195,7 +197,7 @@ instance Alternative Compiler where
     x <|> y = compilerCatch x $ \es -> do
         logger <- compilerLogger <$> compilerAsk
         forM_ es $ \e -> compilerUnsafeIO $ Logger.debug logger $
-            "Hakyll.Core.Compiler.Internal: Alternative failed: " ++ e
+            "Hakyll.Core.Compiler.Internal: Alternative failed: " `T.append` e
         y
     {-# INLINE (<|>) #-}
 
@@ -213,13 +215,13 @@ compilerTell deps = Compiler $ \_ -> return $ CompilerDone () deps
 
 
 --------------------------------------------------------------------------------
-compilerThrow :: [String] -> Compiler a
+compilerThrow :: [T.Text] -> Compiler a
 compilerThrow es = Compiler $ \_ -> return $ CompilerError es
 {-# INLINE compilerThrow #-}
 
 
 --------------------------------------------------------------------------------
-compilerCatch :: Compiler a -> ([String] -> Compiler a) -> Compiler a
+compilerCatch :: Compiler a -> ([T.Text] -> Compiler a) -> Compiler a
 compilerCatch (Compiler x) f = Compiler $ \r -> do
     res <- x r
     case res of
@@ -250,7 +252,7 @@ compilerTellDependencies :: [Dependency] -> Compiler ()
 compilerTellDependencies ds = do
   logger <- compilerLogger <$> compilerAsk
   forM_ ds $ \d -> compilerUnsafeIO $ Logger.debug logger $
-      "Hakyll.Core.Compiler.Internal: Adding dependency: " ++ show d
+      "Hakyll.Core.Compiler.Internal: Adding dependency: " `T.append` (T.pack $ show d)
   compilerTell mempty {compilerDependencies = ds}
 {-# INLINE compilerTellDependencies #-}
 

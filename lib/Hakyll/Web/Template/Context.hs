@@ -1,6 +1,7 @@
 --------------------------------------------------------------------------------
 {-# LANGUAGE CPP                       #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings         #-}
 module Hakyll.Web.Template.Context
     ( ContextField (..)
     , Context (..)
@@ -35,6 +36,7 @@ module Hakyll.Web.Template.Context
 import           Control.Applicative           (Alternative (..))
 import           Control.Monad                 (msum)
 import           Data.List                     (intercalate)
+import qualified Data.Text                     as T
 #if MIN_VERSION_base(4,9,0)
 import           Data.Semigroup                (Semigroup (..))
 #endif
@@ -56,7 +58,7 @@ import           System.FilePath               (splitDirectories, takeBaseName)
 --------------------------------------------------------------------------------
 -- | Mostly for internal usage
 data ContextField
-    = StringField String
+    = StringField T.Text
     | forall a. ListField (Context a) [Item a]
 
 
@@ -76,7 +78,7 @@ data ContextField
 -- @
 --
 newtype Context a = Context
-    { unContext :: String -> [String] -> Item a -> Compiler ContextField
+    { unContext :: T.Text -> [T.Text] -> Item a -> Compiler ContextField
     }
 
 
@@ -96,15 +98,15 @@ instance Monoid (Context a) where
 
 
 --------------------------------------------------------------------------------
-field' :: String -> (Item a -> Compiler ContextField) -> Context a
+field' :: T.Text -> (Item a -> Compiler ContextField) -> Context a
 field' key value = Context $ \k _ i -> if k == key then value i else empty
 
 
 --------------------------------------------------------------------------------
 -- | Constructs a new field in the 'Context.'
 field
-    :: String                      -- ^ Key
-    -> (Item a -> Compiler String) -- ^ Function that constructs a value based
+    :: T.Text                      -- ^ Key
+    -> (Item a -> Compiler T.Text) -- ^ Function that constructs a value based
                                    -- on the item
     -> Context a
 field key value = field' key (fmap StringField . value)
@@ -113,33 +115,33 @@ field key value = field' key (fmap StringField . value)
 --------------------------------------------------------------------------------
 -- | Creates a 'field' to use with the @$if()$@ template macro.
 boolField
-    :: String
+    :: T.Text
     -> (Item a -> Bool)
     -> Context a
 boolField name f = field name (\i -> if f i
-    then pure (error $ unwords ["no string value for bool field:",name])
+    then pure (error $ unwords ["no string value for bool field:", T.unpack name])
     else empty)
 
 
 --------------------------------------------------------------------------------
 -- | Creates a 'field' that does not depend on the 'Item'
-constField :: String -> String -> Context a
+constField :: T.Text -> T.Text -> Context a
 constField key = field key . const . return
 
 
 --------------------------------------------------------------------------------
-listField :: String -> Context a -> Compiler [Item a] -> Context b
+listField :: T.Text -> Context a -> Compiler [Item a] -> Context b
 listField key c xs = listFieldWith key c (const xs)
 
 
 --------------------------------------------------------------------------------
 listFieldWith
-    :: String -> Context a -> (Item b -> Compiler [Item a]) -> Context b
+    :: T.Text -> Context a -> (Item b -> Compiler [Item a]) -> Context b
 listFieldWith key c f = field' key $ fmap (ListField c) . f
 
 
 --------------------------------------------------------------------------------
-functionField :: String -> ([String] -> Item a -> Compiler String) -> Context a
+functionField :: T.Text -> ([T.Text] -> Item a -> Compiler T.Text) -> Context a
 functionField name value = Context $ \k args i ->
     if k == name
         then StringField <$> value args i
@@ -147,7 +149,7 @@ functionField name value = Context $ \k args i ->
 
 
 --------------------------------------------------------------------------------
-mapContext :: (String -> String) -> Context a -> Context a
+mapContext :: (T.Text -> T.Text) -> Context a -> Context a
 mapContext f (Context c) = Context $ \k a i -> do
     fld <- c k a i
     case fld of
@@ -165,10 +167,10 @@ mapContext f (Context c) = Context $ \k a i -> do
 --
 -- The contents of the included file will not be interpolated.
 --
-snippetField :: Context String
+snippetField :: Context T.Text
 snippetField = functionField "snippet" f
   where
-    f [contentsPath] _ = loadBody (fromFilePath contentsPath)
+    f [contentsPath] _ = loadBody (fromFilePath $ T.unpack contentsPath)
     f _              i = error $
         "Too many arguments to function 'snippet()' in item " ++
             show (itemIdentifier i)
@@ -185,7 +187,7 @@ snippetField = functionField "snippet" f
 --     4. A @$path$@ 'pathField'
 --
 --     5. A @$title$@ 'titleField'
-defaultContext :: Context String
+defaultContext :: Context T.Text
 defaultContext =
     bodyField     "body"     `mappend`
     metadataField            `mappend`
@@ -196,13 +198,13 @@ defaultContext =
 
 
 --------------------------------------------------------------------------------
-teaserSeparator :: String
+teaserSeparator :: T.Text
 teaserSeparator = "<!--more-->"
 
 
 --------------------------------------------------------------------------------
 -- | Constructs a 'field' that contains the body of the item.
-bodyField :: String -> Context String
+bodyField :: T.Text -> Context T.Text
 bodyField key = field key $ return . itemBody
 
 
@@ -216,21 +218,21 @@ metadataField = Context $ \k _ i -> do
 
 --------------------------------------------------------------------------------
 -- | Absolute url to the resulting item
-urlField :: String -> Context a
+urlField :: T.Text -> Context a
 urlField key = field key $
-    fmap (maybe empty toUrl) . getRoute . itemIdentifier
+               fmap T.pack . fmap (maybe empty (toUrl)) . getRoute . itemIdentifier
 
 
 --------------------------------------------------------------------------------
 -- | Filepath of the underlying file of the item
-pathField :: String -> Context a
-pathField key = field key $ return . toFilePath . itemIdentifier
+pathField :: T.Text -> Context a
+pathField key = field key $ return . T.pack . toFilePath . itemIdentifier
 
 
 --------------------------------------------------------------------------------
 -- | This title 'field' takes the basename of the underlying file by default
-titleField :: String -> Context a
-titleField = mapContext takeBaseName . pathField
+titleField :: T.Text -> Context a
+titleField = mapContext (\t -> T.pack $ takeBaseName $ T.unpack t) . pathField
 
 
 --------------------------------------------------------------------------------
@@ -270,7 +272,7 @@ titleField = mapContext takeBaseName . pathField
 -- @folder//yyyy-mm-dd-title//dist//main.extension@ .
 -- In case of multiple matches, the rightmost one is used.
 
-dateField :: String     -- ^ Key in which the rendered date should be placed
+dateField :: T.Text     -- ^ Key in which the rendered date should be placed
           -> String     -- ^ Format to use on the date
           -> Context a  -- ^ Resulting context
 dateField = dateFieldWith defaultTimeLocale
@@ -281,12 +283,12 @@ dateField = dateFieldWith defaultTimeLocale
 -- specify a time locale that is used for outputting the date. For more
 -- details, see 'dateField'.
 dateFieldWith :: TimeLocale  -- ^ Output time locale
-              -> String      -- ^ Destination key
+              -> T.Text      -- ^ Destination key
               -> String      -- ^ Format to use on the date
               -> Context a   -- ^ Resulting context
 dateFieldWith locale key format = field key $ \i -> do
     time <- getItemUTC locale $ itemIdentifier i
-    return $ formatTime locale format time
+    return $ T.pack $ formatTime locale format time
 
 
 --------------------------------------------------------------------------------
@@ -299,7 +301,7 @@ getItemUTC :: MonadMetadata m
            -> m UTCTime         -- ^ Parsed UTCTime
 getItemUTC locale id' = do
     metadata <- getMetadata id'
-    let tryField k fmt = lookupString k metadata >>= parseTime' fmt
+    let tryField k fmt = lookupString k metadata >>= (\t -> parseTime' fmt $ T.unpack t)
         paths          = splitDirectories $ toFilePath id'
 
     maybe empty' return $ msum $
@@ -333,7 +335,7 @@ getItemModificationTime identifier = do
 
 
 --------------------------------------------------------------------------------
-modificationTimeField :: String     -- ^ Key
+modificationTimeField :: T.Text     -- ^ Key
                       -> String     -- ^ Format
                       -> Context  a -- ^ Resulting context
 modificationTimeField = modificationTimeFieldWith defaultTimeLocale
@@ -341,19 +343,19 @@ modificationTimeField = modificationTimeFieldWith defaultTimeLocale
 
 --------------------------------------------------------------------------------
 modificationTimeFieldWith :: TimeLocale  -- ^ Time output locale
-                          -> String      -- ^ Key
+                          -> T.Text      -- ^ Key
                           -> String      -- ^ Format
                           -> Context a   -- ^ Resulting context
 modificationTimeFieldWith locale key fmt = field key $ \i -> do
     mtime <- getItemModificationTime $ itemIdentifier i
-    return $ formatTime locale fmt mtime
+    return $ T.pack $ formatTime locale fmt mtime
 
 
 --------------------------------------------------------------------------------
 -- | A context with "teaser" key which contain a teaser of the item.
 -- The item is loaded from the given snapshot (which should be saved
 -- in the user code before any templates are applied).
-teaserField :: String           -- ^ Key to use
+teaserField :: T.Text           -- ^ Key to use
             -> Snapshot         -- ^ Snapshot to load
             -> Context String   -- ^ Resulting context
 teaserField = teaserFieldWithSeparator teaserSeparator
@@ -364,23 +366,23 @@ teaserField = teaserFieldWithSeparator teaserSeparator
 -- the snapshot content before the teaser separator. The item is loaded from the
 -- given snapshot (which should be saved in the user code before any templates
 -- are applied).
-teaserFieldWithSeparator :: String           -- ^ Separator to use
-                         -> String           -- ^ Key to use
+teaserFieldWithSeparator :: T.Text           -- ^ Separator to use
+                         -> T.Text           -- ^ Key to use
                          -> Snapshot         -- ^ Snapshot to load
                          -> Context String   -- ^ Resulting context
 teaserFieldWithSeparator separator key snapshot = field key $ \item -> do
     body <- itemBody <$> loadSnapshot (itemIdentifier item) snapshot
-    case needlePrefix separator body of
+    case needlePrefix (T.unpack separator) (T.unpack body) of
         Nothing -> fail $
             "Hakyll.Web.Template.Context: no teaser defined for " ++
             show (itemIdentifier item)
-        Just t -> return t
+        Just t -> return $ T.pack t
 
 
 --------------------------------------------------------------------------------
 missingField :: Context a
 missingField = Context $ \k _ i -> fail $
-    "Missing field $" ++ k ++ "$ in context for item " ++
+    "Missing field $" ++ T.unpack k ++ "$ in context for item " ++
     show (itemIdentifier i)
 
 parseTimeM :: Bool -> TimeLocale -> String -> String -> Maybe UTCTime

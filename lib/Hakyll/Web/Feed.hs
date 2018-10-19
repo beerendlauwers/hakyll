@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 --------------------------------------------------------------------------------
 -- | A Module that allows easy rendering of RSS feeds.
@@ -41,20 +42,20 @@ import qualified Data.Text.Encoding          as T
 
 
 --------------------------------------------------------------------------------
-rssTemplate :: String
-rssTemplate = T.unpack $
+rssTemplate :: T.Text
+rssTemplate =
     T.decodeUtf8 $(makeRelativeToProject "data/templates/rss.xml" >>= embedFile)
 
-rssItemTemplate :: String
-rssItemTemplate = T.unpack $
+rssItemTemplate :: T.Text
+rssItemTemplate =
     T.decodeUtf8 $(makeRelativeToProject "data/templates/rss-item.xml" >>= embedFile)
 
-atomTemplate :: String
-atomTemplate = T.unpack $
-    T.decodeUtf8 $(makeRelativeToProject "data/templates/atom.xml" >>= embedFile)
+atomTemplate :: T.Text
+atomTemplate =
+  T.decodeUtf8 $(makeRelativeToProject "data/templates/atom.xml" >>= embedFile)
 
-atomItemTemplate :: String
-atomItemTemplate = T.unpack $
+atomItemTemplate :: T.Text
+atomItemTemplate =
     T.decodeUtf8 $(makeRelativeToProject "data/templates/atom-item.xml" >>= embedFile)
 
 --------------------------------------------------------------------------------
@@ -75,12 +76,12 @@ data FeedConfiguration = FeedConfiguration
 
 --------------------------------------------------------------------------------
 -- | Abstract function to render any feed.
-renderFeed :: String                  -- ^ Default feed template
-           -> String                  -- ^ Default item template
+renderFeed :: T.Text                  -- ^ Default feed template
+           -> T.Text                  -- ^ Default item template
            -> FeedConfiguration       -- ^ Feed configuration
-           -> Context String          -- ^ Context for the items
-           -> [Item String]           -- ^ Input items
-           -> Compiler (Item String)  -- ^ Resulting item
+           -> Context T.Text          -- ^ Context for the items
+           -> [Item T.Text]           -- ^ Input items
+           -> Compiler (Item T.Text)  -- ^ Resulting item
 renderFeed defFeed defItem config itemContext items = do
     feedTpl <- readTemplateFile defFeed
     itemTpl <- readTemplateFile defItem
@@ -89,25 +90,25 @@ renderFeed defFeed defItem config itemContext items = do
     body <- makeItem =<< applyTemplateList itemTpl itemContext' protectedItems
     applyTemplate feedTpl feedContext body
   where
-    applyFilter :: (Monad m,Functor f) => (String -> String) -> f String -> m (f String)
+    applyFilter :: (Monad m,Functor f) => (a -> a) -> f a -> m (f a)
     applyFilter tr str = return $ fmap tr str
-    protectCDATA :: String -> String
-    protectCDATA = replaceAll "]]>" (const "]]&gt;")
+    protectCDATA :: T.Text -> T.Text
+    protectCDATA = T.pack . replaceAll "]]>" (const "]]&gt;") . T.unpack
 
     itemContext' = mconcat
         [ itemContext
-        , constField "root" (feedRoot config)
-        , constField "authorName"  (feedAuthorName config)
-        , constField "authorEmail" (feedAuthorEmail config)
+        , constField "root" (T.pack $ feedRoot config)
+        , constField "authorName"  (T.pack $ feedAuthorName config)
+        , constField "authorEmail" (T.pack $ feedAuthorEmail config)
         ]
 
     feedContext = mconcat
          [ bodyField  "body"
-         , constField "title"       (feedTitle config)
-         , constField "description" (feedDescription config)
-         , constField "authorName"  (feedAuthorName config)
-         , constField "authorEmail" (feedAuthorEmail config)
-         , constField "root"        (feedRoot config)
+         , constField "title"       (T.pack $ feedTitle config)
+         , constField "description" (T.pack $ feedDescription config)
+         , constField "authorName"  (T.pack $ feedAuthorName config)
+         , constField "authorEmail" (T.pack $ feedAuthorEmail config)
+         , constField "root"        (T.pack $ feedRoot config)
          , urlField   "url"
          , updatedField
          , missingField
@@ -121,16 +122,16 @@ renderFeed defFeed defItem config itemContext items = do
             ListField _ _ -> fail "Hakyll.Web.Feed.renderFeed: Internal error"
             StringField s -> return s
 
-    readTemplateFile :: String -> Compiler Template
+    readTemplateFile :: T.Text -> Compiler Template
     readTemplateFile value = pure $ template $ readTemplateElems value
 
 
 --------------------------------------------------------------------------------
 -- | Render an RSS feed with a number of items.
 renderRss :: FeedConfiguration       -- ^ Feed configuration
-          -> Context String          -- ^ Item context
-          -> [Item String]           -- ^ Feed items
-          -> Compiler (Item String)  -- ^ Resulting feed
+          -> Context T.Text          -- ^ Item context
+          -> [Item T.Text]           -- ^ Feed items
+          -> Compiler (Item T.Text)  -- ^ Resulting feed
 renderRss config context = renderFeed
     rssTemplate rssItemTemplate config
     (makeItemContext "%a, %d %b %Y %H:%M:%S UT" context)
@@ -139,9 +140,9 @@ renderRss config context = renderFeed
 --------------------------------------------------------------------------------
 -- | Render an Atom feed with a number of items.
 renderAtom :: FeedConfiguration       -- ^ Feed configuration
-           -> Context String          -- ^ Item context
-           -> [Item String]           -- ^ Feed items
-           -> Compiler (Item String)  -- ^ Resulting feed
+           -> Context T.Text          -- ^ Item context
+           -> [Item T.Text]           -- ^ Feed items
+           -> Compiler (Item T.Text)  -- ^ Resulting feed
 renderAtom config context = renderFeed
     atomTemplate atomItemTemplate config
     (makeItemContext "%Y-%m-%dT%H:%M:%SZ" context)

@@ -15,6 +15,7 @@ import           Control.DeepSeq         (deepseq)
 import           Control.Monad           (forM_)
 import           Data.ByteString.Lazy    (ByteString)
 import qualified Data.ByteString.Lazy    as LB
+import qualified Data.Text as T
 import           Data.IORef              (newIORef, readIORef, writeIORef)
 import           System.Exit             (ExitCode (..))
 import           System.IO               (Handle, hClose, hFlush, hGetContents,
@@ -84,10 +85,10 @@ unixFilterWith :: Monoid o
                -> i                       -- ^ Program input
                -> Compiler o              -- ^ Program output
 unixFilterWith writer reader programName args input = do
-    debugCompiler ("Executing external program " ++ programName)
+    debugCompiler $ T.pack ("Executing external program " ++ programName)
     (output, err, exitCode) <- unsafeCompiler $
         unixFilterIO writer reader programName args input
-    forM_ (lines err) debugCompiler
+    forM_ (lines err) (debugCompiler . T.pack)
     case exitCode of
         ExitSuccess   -> return output
         ExitFailure e -> fail $

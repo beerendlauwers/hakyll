@@ -4,6 +4,7 @@ import           Control.Arrow    (second)
 import           Control.Monad    (forM_)
 import           Data.Char        (isDigit)
 import           Data.List        (isPrefixOf, sortBy)
+import qualified Data.Text as T
 import           Data.Monoid      ((<>))
 import           Data.Ord         (comparing)
 import           Hakyll
@@ -96,16 +97,16 @@ config = defaultConfiguration
 -- into
 --
 -- > http://hackage.haskell.org/packages/archive/base/4.6.0.0/doc/html/Data-String.html
-hackage :: String -> String
+hackage :: T.Text -> T.Text
 hackage url
-    | "/usr" `isPrefixOf` url =
+    | "/usr" `T.isPrefixOf` url = T.pack $
         "http://hackage.haskell.org/packages/archive/" ++
         packageName ++ "/" ++ version' ++ "/doc/html/" ++ baseName
     | otherwise               = url
   where
     (packageName, version')  = second (drop 1) $ break (== '-') package
     (baseName : package : _) = map dropTrailingPathSeparator $
-        reverse $ splitPath url
+        reverse $ splitPath (T.unpack url)
 
 
 --------------------------------------------------------------------------------
@@ -115,7 +116,7 @@ data TutorialType = SeriesTutorial | ArticlesTutorial | ExternalTutorial
 
 --------------------------------------------------------------------------------
 -- | Partition tutorials into tutorial series, other articles, external articles
-tutorialCtx :: Context String
+tutorialCtx :: Context T.Text
 tutorialCtx =
     field "isSeries"   (isTutorialType SeriesTutorial)   <>
     field "isArticle"  (isTutorialType ArticlesTutorial) <>

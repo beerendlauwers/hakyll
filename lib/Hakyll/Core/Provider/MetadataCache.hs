@@ -1,4 +1,5 @@
 --------------------------------------------------------------------------------
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Core.Provider.MetadataCache
     ( resourceMetadata
     , resourceBody
@@ -8,6 +9,7 @@ module Hakyll.Core.Provider.MetadataCache
 
 --------------------------------------------------------------------------------
 import           Control.Monad                 (unless)
+import qualified Data.Text as T
 import           Hakyll.Core.Identifier
 import           Hakyll.Core.Metadata
 import           Hakyll.Core.Provider.Internal
@@ -23,24 +25,24 @@ resourceMetadata p r
         -- TODO keep time in md cache
         load p r
         Store.Found (BinaryMetadata md) <- Store.get (providerStore p)
-            [name, toFilePath r, "metadata"]
+            [name, T.pack $ toFilePath r, "metadata"]
         return md
 
 
 --------------------------------------------------------------------------------
-resourceBody :: Provider -> Identifier -> IO String
+resourceBody :: Provider -> Identifier -> IO T.Text
 resourceBody p r = do
     load p r
     Store.Found bd <- Store.get (providerStore p)
-        [name, toFilePath r, "body"]
+        [name, T.pack $ toFilePath r, "body"]
     maybe (resourceString p r) return bd
 
 
 --------------------------------------------------------------------------------
 resourceInvalidateMetadataCache :: Provider -> Identifier -> IO ()
 resourceInvalidateMetadataCache p r = do
-    Store.delete (providerStore p) [name, toFilePath r, "metadata"]
-    Store.delete (providerStore p) [name, toFilePath r, "body"]
+    Store.delete (providerStore p) [name, T.pack $ toFilePath r, "metadata"]
+    Store.delete (providerStore p) [name, T.pack $ toFilePath r, "body"]
 
 
 --------------------------------------------------------------------------------
@@ -53,10 +55,10 @@ load p r = do
         Store.set store bk  body
   where
     store = providerStore p
-    mdk   = [name, toFilePath r, "metadata"]
-    bk    = [name, toFilePath r, "body"]
+    mdk   = [name, T.pack $ toFilePath r, "metadata"]
+    bk    = [name, T.pack $ toFilePath r, "body"]
 
 
 --------------------------------------------------------------------------------
-name :: String
+name :: T.Text
 name = "Hakyll.Core.Resource.Provider.MetadataCache"

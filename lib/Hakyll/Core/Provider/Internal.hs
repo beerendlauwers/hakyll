@@ -1,4 +1,5 @@
 --------------------------------------------------------------------------------
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -29,6 +30,8 @@ import qualified Data.Map               as M
 import           Data.Maybe             (fromMaybe)
 import           Data.Set               (Set)
 import qualified Data.Set               as S
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import           Data.Time              (Day (..), UTCTime (..))
 import           Data.Typeable          (Typeable)
 import           System.Directory       (getModificationTime)
@@ -155,8 +158,8 @@ resourceFilePath p i = providerDirectory p </> toFilePath i
 
 --------------------------------------------------------------------------------
 -- | Get the raw body of a resource as string
-resourceString :: Provider -> Identifier -> IO String
-resourceString p i = readFile $ resourceFilePath p i
+resourceString :: Provider -> Identifier -> IO T.Text
+resourceString p i = TIO.readFile $ resourceFilePath p i
 
 
 --------------------------------------------------------------------------------

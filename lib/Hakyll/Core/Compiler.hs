@@ -1,4 +1,5 @@
 --------------------------------------------------------------------------------
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 module Hakyll.Core.Compiler
@@ -32,6 +33,7 @@ import           Control.Monad                 (when, unless)
 import           Data.Binary                   (Binary)
 import           Data.ByteString.Lazy          (ByteString)
 import           Data.Typeable                 (Typeable)
+import qualified Data.Text as T
 import           System.Environment            (getProgName)
 import           System.FilePath               (takeExtension)
 
@@ -84,13 +86,13 @@ getRoute identifier = do
 --------------------------------------------------------------------------------
 -- | Get the full contents of the matched source file as a string,
 -- but without metadata preamble, if there was one.
-getResourceBody :: Compiler (Item String)
+getResourceBody :: Compiler (Item T.Text)
 getResourceBody = getResourceWith resourceBody
 
 
 --------------------------------------------------------------------------------
 -- | Get the full contents of the matched source file as a string.
-getResourceString :: Compiler (Item String)
+getResourceString :: Compiler (Item T.Text)
 getResourceString = getResourceWith resourceString
 
 
@@ -133,7 +135,7 @@ saveSnapshot snapshot item = do
     store  <- compilerStore <$> compilerAsk
     logger <- compilerLogger <$> compilerAsk
     compilerUnsafeIO $ do
-        Logger.debug logger $ "Storing snapshot: " ++ snapshot
+        Logger.debug logger $ "Storing snapshot: " `T.append` snapshot
         Internal.saveSnapshot store snapshot item
 
     -- Signal that we saved the snapshot.
@@ -142,7 +144,7 @@ saveSnapshot snapshot item = do
 
 --------------------------------------------------------------------------------
 cached :: (Binary a, Typeable a)
-       => String
+       => T.Text
        -> Compiler a
        -> Compiler a
 cached name compiler = do
@@ -157,11 +159,11 @@ cached name compiler = do
     if modified
         then do
             x <- compiler
-            compilerUnsafeIO $ Store.set store [name, show id'] x
+            compilerUnsafeIO $ Store.set store [name, T.pack $ show id'] x
             return x
         else do
             compilerTellCacheHits 1
-            x        <- compilerUnsafeIO $ Store.get store [name, show id']
+            x        <- compilerUnsafeIO $ Store.get store [name, T.pack $ show id']
             progName <- compilerUnsafeIO getProgName
             case x of Store.Found x' -> return x'
                       _              -> fail $ error' progName
@@ -183,7 +185,7 @@ unsafeCompiler = compilerUnsafeIO
 
 --------------------------------------------------------------------------------
 -- | Compiler for debugging purposes
-debugCompiler :: String -> Compiler ()
+debugCompiler :: T.Text -> Compiler ()
 debugCompiler msg = do
     logger <- compilerLogger <$> compilerAsk
     compilerUnsafeIO $ Logger.debug logger msg

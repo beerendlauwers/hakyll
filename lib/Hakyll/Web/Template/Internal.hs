@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Web.Template.Internal
     ( Template (..)
     , template
@@ -21,6 +22,8 @@ module Hakyll.Web.Template.Internal
 import           Control.Monad.Except                 (MonadError (..))
 import           Data.Binary                          (Binary)
 import           Data.List                            (intercalate)
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import           Data.Typeable                        (Typeable)
 import           GHC.Exts                             (IsString (..))
 import           Prelude                              hiding (id)
@@ -51,7 +54,7 @@ instance Writable Template where
 
 --------------------------------------------------------------------------------
 instance IsString Template where
-    fromString = readTemplate
+    fromString = readTemplate . T.pack
 
 
 --------------------------------------------------------------------------------
@@ -61,7 +64,7 @@ template = Template . trim
 
 
 --------------------------------------------------------------------------------
-readTemplate :: String -> Template
+readTemplate :: T.Text -> Template
 readTemplate = Template . trim . readTemplateElems
 
 --------------------------------------------------------------------------------
@@ -85,7 +88,7 @@ templateCompiler = cached "Hakyll.Web.Template.templateCompiler" $ do
 applyTemplate :: Template                -- ^ Template
               -> Context a               -- ^ Context
               -> Item a                  -- ^ Page
-              -> Compiler (Item String)  -- ^ Resulting item
+              -> Compiler (Item T.Text)  -- ^ Resulting item
 applyTemplate tpl context item = do
     body <- applyTemplate' (unTemplate tpl) context item
     return $ itemSetBody body item
@@ -97,30 +100,30 @@ applyTemplate'
        [TemplateElement] -- ^ Unwrapped Template
     -> Context a         -- ^ Context
     -> Item a            -- ^ Page
-    -> Compiler String   -- ^ Resulting item
+    -> Compiler T.Text   -- ^ Resulting item
 applyTemplate' tes context x = go tes
   where
-    context' :: String -> [String] -> Item a -> Compiler ContextField
+    context' :: T.Text -> [T.Text] -> Item a -> Compiler ContextField
     context' = unContext (context `mappend` missingField)
 
-    go = fmap concat . mapM applyElem
+    go = fmap T.concat . mapM applyElem
 
     trimError = error $ "Hakyll.Web.Template.applyTemplate: template not " ++
         "fully trimmed."
 
     ---------------------------------------------------------------------------
 
-    applyElem :: TemplateElement -> Compiler String
+    applyElem :: TemplateElement -> Compiler T.Text
 
     applyElem TrimL = trimError
 
     applyElem TrimR = trimError
 
-    applyElem (Chunk c) = return c
+    applyElem (Chunk c) = return $ T.pack c
 
     applyElem (Expr e) = applyExpr e >>= getString e
 
-    applyElem Escaped = return "$"
+    applyElem Escaped = return $ T.pack "$"
 
     applyElem (If e t mf) = (applyExpr e >> go t) `catchError` handler
       where
@@ -135,11 +138,11 @@ applyTemplate' tes context x = go tes
         ListField c xs -> do
             sep <- maybe (return "") go s
             bs  <- mapM (applyTemplate' b c) xs
-            return $ intercalate sep bs
+            return $ T.intercalate sep bs
 
     applyElem (Partial e) = do
         p             <- applyExpr e >>= getString e
-        Template tpl' <- loadBody (fromFilePath p)
+        Template tpl' <- loadBody (fromFilePath (T.unpack p))
         applyTemplate' tpl' context x
 
     ---------------------------------------------------------------------------
@@ -176,7 +179,7 @@ applyTemplate' tes context x = go tes
 loadAndApplyTemplate :: Identifier              -- ^ Template identifier
                      -> Context a               -- ^ Context
                      -> Item a                  -- ^ Page
-                     -> Compiler (Item String)  -- ^ Resulting item
+                     -> Compiler (Item T.Text)  -- ^ Resulting item
 loadAndApplyTemplate identifier context item = do
     tpl <- loadBody identifier
     applyTemplate tpl context item
@@ -186,9 +189,9 @@ loadAndApplyTemplate identifier context item = do
 -- | It is also possible that you want to substitute @$key$@s within the body of
 -- an item. This function does that by interpreting the item body as a template,
 -- and then applying it to itself.
-applyAsTemplate :: Context String          -- ^ Context
-                -> Item String             -- ^ Item and template
-                -> Compiler (Item String)  -- ^ Resulting item
+applyAsTemplate :: Context T.Text          -- ^ Context
+                -> Item T.Text             -- ^ Item and template
+                -> Compiler (Item T.Text)  -- ^ Resulting item
 applyAsTemplate context item =
     let tpl = template $ readTemplateElemsFile file (itemBody item)
         file = toFilePath $ itemIdentifier item
@@ -198,5 +201,5 @@ applyAsTemplate context item =
 --------------------------------------------------------------------------------
 unsafeReadTemplateFile :: FilePath -> Compiler Template
 unsafeReadTemplateFile file = do
-    tpl <- unsafeCompiler $ readFile file
+    tpl <- unsafeCompiler $ TIO.readFile file
     pure $ template $ readTemplateElemsFile file tpl

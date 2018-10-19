@@ -1,5 +1,6 @@
 --------------------------------------------------------------------------------
 -- | Produce pretty, thread-safe logs
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Core.Logger
     ( Verbosity (..)
     , Logger
@@ -18,6 +19,8 @@ import           Control.Concurrent.Chan (Chan, newChan, readChan, writeChan)
 import           Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, takeMVar)
 import           Control.Monad           (forever)
 import           Control.Monad.Trans     (MonadIO, liftIO)
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import           Prelude                 hiding (error)
 
 
@@ -32,9 +35,9 @@ data Verbosity
 --------------------------------------------------------------------------------
 -- | Logger structure. Very complicated.
 data Logger = Logger
-    { loggerChan      :: Chan (Maybe String)  -- ^ Nothing marks the end
+    { loggerChan      :: Chan (Maybe T.Text)  -- ^ Nothing marks the end
     , loggerSync      :: MVar ()              -- ^ Used for sync on quit
-    , loggerSink      :: String -> IO ()      -- ^ Out sink
+    , loggerSink      :: T.Text -> IO ()      -- ^ Out sink
     , loggerVerbosity :: Verbosity            -- ^ Verbosity
     }
 
@@ -44,7 +47,7 @@ data Logger = Logger
 new :: Verbosity -> IO Logger
 new vbty = do
     logger <- Logger <$>
-        newChan <*> newEmptyMVar <*> pure putStrLn <*> pure vbty
+        newChan <*> newEmptyMVar <*> pure TIO.putStrLn <*> pure vbty
     _      <- forkIO $ loggerThread logger
     return logger
   where
@@ -70,7 +73,7 @@ flush logger = do
 string :: MonadIO m
        => Logger     -- ^ Logger
        -> Verbosity  -- ^ Verbosity of the string
-       -> String     -- ^ Section name
+       -> T.Text     -- ^ Section name
        -> m ()       -- ^ No result
 string l v m
     | loggerVerbosity l >= v = liftIO $ writeChan (loggerChan l) (Just m)
@@ -78,20 +81,20 @@ string l v m
 
 
 --------------------------------------------------------------------------------
-error :: MonadIO m => Logger -> String -> m ()
-error l m = string l Error $ "  [ERROR] " ++ m
+error :: MonadIO m => Logger -> T.Text -> m ()
+error l m = string l Error $ "  [ERROR] " `T.append` m
 
 
 --------------------------------------------------------------------------------
-header :: MonadIO m => Logger -> String -> m ()
+header :: MonadIO m => Logger -> T.Text -> m ()
 header l = string l Message
 
 
 --------------------------------------------------------------------------------
-message :: MonadIO m => Logger -> String -> m ()
-message l m = string l Message $ "  " ++ m
+message :: MonadIO m => Logger -> T.Text -> m ()
+message l m = string l Message $ "  " `T.append` m
 
 
 --------------------------------------------------------------------------------
-debug :: MonadIO m => Logger -> String -> m ()
-debug l m = string l Debug $ "  [DEBUG] " ++ m
+debug :: MonadIO m => Logger -> T.Text -> m ()
+debug l m = string l Debug $ "  [DEBUG] " `T.append` m

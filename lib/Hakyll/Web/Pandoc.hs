@@ -1,5 +1,6 @@
 --------------------------------------------------------------------------------
 -- | Module exporting convenient pandoc bindings
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Web.Pandoc
     ( -- * The basic building blocks
       readPandoc
@@ -36,7 +37,7 @@ import           Hakyll.Web.Pandoc.FileType
 --------------------------------------------------------------------------------
 -- | Read a string using pandoc, with the default options
 readPandoc
-    :: Item String             -- ^ String to read
+    :: Item T.Text             -- ^ String to read
     -> Compiler (Item Pandoc)  -- ^ Resulting document
 readPandoc = readPandocWith defaultHakyllReaderOptions
 
@@ -45,10 +46,10 @@ readPandoc = readPandocWith defaultHakyllReaderOptions
 -- | Read a string using pandoc, with the supplied options
 readPandocWith
     :: ReaderOptions           -- ^ Parser options
-    -> Item String             -- ^ String to read
+    -> Item T.Text             -- ^ String to read
     -> Compiler (Item Pandoc)  -- ^ Resulting document
 readPandocWith ropt item =
-    case runPure $ traverse (reader ropt (itemFileType item)) (fmap T.pack item) of
+    case runPure $ traverse (reader ropt (itemFileType item)) item of
         Left err    -> fail $
             "Hakyll.Web.Pandoc.readPandocWith: parse failed: " ++ show err
         Right item' -> return item'
@@ -73,7 +74,7 @@ readPandocWith ropt item =
 --------------------------------------------------------------------------------
 -- | Write a document (as HTML) using pandoc, with the default options
 writePandoc :: Item Pandoc  -- ^ Document to write
-            -> Item String  -- ^ Resulting HTML
+            -> Item T.Text  -- ^ Resulting HTML
 writePandoc = writePandocWith defaultHakyllWriterOptions
 
 
@@ -81,16 +82,16 @@ writePandoc = writePandocWith defaultHakyllWriterOptions
 -- | Write a document (as HTML) using pandoc, with the supplied options
 writePandocWith :: WriterOptions  -- ^ Writer options for pandoc
                 -> Item Pandoc    -- ^ Document to write
-                -> Item String    -- ^ Resulting HTML
+                -> Item T.Text    -- ^ Resulting HTML
 writePandocWith wopt (Item itemi doc) =
     case runPure $ writeHtml5String wopt doc of
         Left err    -> error $ "Hakyll.Web.Pandoc.writePandocWith: " ++ show err
-        Right item' -> Item itemi $ T.unpack item'
+        Right item' -> Item itemi item'
 
 
 --------------------------------------------------------------------------------
 -- | Render the resource using pandoc
-renderPandoc :: Item String -> Compiler (Item String)
+renderPandoc :: Item T.Text -> Compiler (Item T.Text)
 renderPandoc =
     renderPandocWith defaultHakyllReaderOptions defaultHakyllWriterOptions
 
@@ -98,14 +99,14 @@ renderPandoc =
 --------------------------------------------------------------------------------
 -- | Render the resource using pandoc
 renderPandocWith
-    :: ReaderOptions -> WriterOptions -> Item String -> Compiler (Item String)
+    :: ReaderOptions -> WriterOptions -> Item T.Text -> Compiler (Item T.Text)
 renderPandocWith ropt wopt item =
     writePandocWith wopt <$> readPandocWith ropt item
 
 
 --------------------------------------------------------------------------------
 -- | Read a page render using pandoc
-pandocCompiler :: Compiler (Item String)
+pandocCompiler :: Compiler (Item T.Text)
 pandocCompiler =
     pandocCompilerWith defaultHakyllReaderOptions defaultHakyllWriterOptions
 
@@ -113,7 +114,7 @@ pandocCompiler =
 --------------------------------------------------------------------------------
 -- | A version of 'pandocCompiler' which allows you to specify your own pandoc
 -- options
-pandocCompilerWith :: ReaderOptions -> WriterOptions -> Compiler (Item String)
+pandocCompilerWith :: ReaderOptions -> WriterOptions -> Compiler (Item T.Text)
 pandocCompilerWith ropt wopt =
     cached "Hakyll.Web.Pandoc.pandocCompilerWith" $
         pandocCompilerWithTransform ropt wopt id
@@ -124,7 +125,7 @@ pandocCompilerWith ropt wopt =
 -- pandoc transformation for the content
 pandocCompilerWithTransform :: ReaderOptions -> WriterOptions
                             -> (Pandoc -> Pandoc)
-                            -> Compiler (Item String)
+                            -> Compiler (Item T.Text)
 pandocCompilerWithTransform ropt wopt f =
     pandocCompilerWithTransformM ropt wopt (return . f)
 
@@ -136,7 +137,7 @@ pandocCompilerWithTransform ropt wopt f =
 -- metadata, etc
 pandocCompilerWithTransformM :: ReaderOptions -> WriterOptions
                     -> (Pandoc -> Compiler Pandoc)
-                    -> Compiler (Item String)
+                    -> Compiler (Item T.Text)
 pandocCompilerWithTransformM ropt wopt f =
     writePandocWith wopt <$>
         (traverse f =<< readPandocWith ropt =<< getResourceBody)

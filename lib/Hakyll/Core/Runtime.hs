@@ -1,4 +1,5 @@
 --------------------------------------------------------------------------------
+{-# LANGUAGE OverloadedStrings          #-}
 module Hakyll.Core.Runtime
     ( run
     ) where
@@ -16,6 +17,7 @@ import           Data.Map                      (Map)
 import qualified Data.Map                      as M
 import           Data.Set                      (Set)
 import qualified Data.Set                      as S
+import qualified Data.Text as T
 import           System.Exit                   (ExitCode (..))
 import           System.FilePath               ((</>))
 
@@ -43,6 +45,7 @@ import           Hakyll.Core.Writable
 run :: Configuration -> Logger -> Rules a -> IO (ExitCode, RuleSet)
 run config logger rules = do
     -- Initialization
+    Logger.header logger "Beerend testing..."
     Logger.header logger "Initialising..."
     Logger.message logger "Creating store..."
     store <- Store.new (inMemoryCache config) $ storeDirectory config
@@ -115,7 +118,7 @@ data RuntimeState = RuntimeState
 
 
 --------------------------------------------------------------------------------
-type Runtime a = RWST RuntimeRead () RuntimeState (ExceptT String IO) a
+type Runtime a = RWST RuntimeRead () RuntimeState (ExceptT T.Text IO) a
 
 
 --------------------------------------------------------------------------------
@@ -172,7 +175,7 @@ pickAndChase = do
 --------------------------------------------------------------------------------
 chase :: [Identifier] -> Identifier -> Runtime ()
 chase trail id'
-    | id' `elem` trail = throwError $ "Hakyll.Core.Runtime.chase: " ++
+    | id' `elem` trail = throwError $ T.pack $  "Hakyll.Core.Runtime.chase: " ++
         "Dependency cycle detected: " ++ intercalate " depends on "
             (map show $ dropWhile (/= id') (reverse trail) ++ [id'])
     | otherwise        = do
@@ -183,7 +186,7 @@ chase trail id'
         routes   <- runtimeRoutes        <$> ask
         store    <- runtimeStore         <$> ask
         config   <- runtimeConfiguration <$> ask
-        Logger.debug logger $ "Processing " ++ show id'
+        Logger.debug logger $ T.pack $ "Processing " ++ show id'
 
         let compiler = todo M.! id'
             read' = CompilerRead
@@ -201,7 +204,7 @@ chase trail id'
             -- Rethrow error
             CompilerError [] -> throwError
                 "Compiler failed but no info given, try running with -v?"
-            CompilerError es -> throwError $ intercalate "; " es
+            CompilerError es -> throwError $ T.intercalate "; " es
 
             -- Signal that a snapshot was saved ->
             CompilerSnapshot snapshot c -> do
@@ -217,13 +220,13 @@ chase trail id'
             CompilerDone (SomeItem item) cwrite -> do
                 -- Print some info
                 let facts = compilerDependencies cwrite
-                    cacheHits
-                        | compilerCacheHits cwrite <= 0 = "updated"
-                        | otherwise                     = "cached "
-                Logger.message logger $ cacheHits ++ " " ++ show id'
+                --    cacheHits
+                --        | compilerCacheHits cwrite <= 0 = "updated"
+                --        | otherwise                     = "cached "
+                --Logger.message logger $ cacheHits ++ " " ++ show id'
 
                 -- Sanity check
-                unless (itemIdentifier item == id') $ throwError $
+                unless (itemIdentifier item == id') $ throwError $ T.pack $
                     "The compiler yielded an Item with Identifier " ++
                     show (itemIdentifier item) ++ ", but we were expecting " ++
                     "an Item with Identifier " ++ show id' ++ " " ++
@@ -237,7 +240,7 @@ chase trail id'
                         let path = destinationDirectory config </> route
                         liftIO $ makeDirectories path
                         liftIO $ write path item
-                        Logger.debug logger $ "Routed to " ++ path
+                        Logger.debug logger $ "Routed to " `T.append` T.pack path
 
                 -- Save! (For load)
                 liftIO $ save store item
@@ -270,7 +273,7 @@ chase trail id'
 
                 -- If the required item is already compiled, continue, or, start
                 -- chasing that
-                Logger.debug logger $ "Require " ++ show depId ++
-                    " (snapshot " ++ depSnapshot ++ "): " ++
+                Logger.debug logger $ T.pack $ "Require " ++ show depId ++
+                    " (snapshot " ++ (T.unpack depSnapshot) ++ "): " ++
                     (if depDone then "OK" else "chasing")
                 if depDone then chase trail id' else chase (id' : trail) depId

@@ -25,6 +25,7 @@ module Hakyll.Web.Pandoc.Biblio
 --------------------------------------------------------------------------------
 import           Control.Monad            (liftM, replicateM)
 import           Data.Binary              (Binary (..))
+import qualified Data.Text as T
 import           Data.Typeable            (Typeable)
 import           Hakyll.Core.Compiler
 import           Hakyll.Core.Compiler.Internal
@@ -96,7 +97,7 @@ biblioCompiler = do
 readPandocBiblio :: ReaderOptions
                  -> Item CSL
                  -> Item Biblio
-                 -> (Item String)
+                 -> (Item T.Text)
                  -> Compiler (Item Pandoc)
 readPandocBiblio ropt csl biblio item = do
     -- Parse CSL file, if given
@@ -114,7 +115,7 @@ readPandocBiblio ropt csl biblio item = do
     return $ fmap (const pandoc') item
 
 --------------------------------------------------------------------------------
-pandocBiblioCompiler :: String -> String -> Compiler (Item String)
+pandocBiblioCompiler :: String -> String -> Compiler (Item T.Text)
 pandocBiblioCompiler cslFileName bibFileName = do
     csl <- load $ fromFilePath cslFileName
     bib <- load $ fromFilePath bibFileName

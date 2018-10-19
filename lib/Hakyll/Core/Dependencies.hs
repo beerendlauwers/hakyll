@@ -21,6 +21,7 @@ import qualified Data.Map                       as M
 import           Data.Maybe                     (fromMaybe)
 import           Data.Set                       (Set)
 import qualified Data.Set                       as S
+import qualified Data.Text as T
 import           Data.Typeable                  (Typeable)
 
 
@@ -55,7 +56,7 @@ outOfDate
     :: [Identifier]     -- ^ All known identifiers
     -> Set Identifier   -- ^ Initially out-of-date resources
     -> DependencyFacts  -- ^ Old dependency facts
-    -> (Set Identifier, DependencyFacts, [String])
+    -> (Set Identifier, DependencyFacts, [T.Text])
 outOfDate universe ood oldFacts =
     let (_, state, logs) = runRWS rws universe (DependencyState oldFacts ood)
     in (dependencyOod state, dependencyFacts state, logs)
@@ -74,7 +75,7 @@ data DependencyState = DependencyState
 
 
 --------------------------------------------------------------------------------
-type DependencyM a = RWS [Identifier] [String] DependencyState a
+type DependencyM a = RWS [Identifier] [T.Text] DependencyState a
 
 
 --------------------------------------------------------------------------------
@@ -99,7 +100,7 @@ checkNew = do
     universe <- ask
     facts    <- dependencyFacts <$> State.get
     forM_ universe $ \id' -> unless (id' `M.member` facts) $ do
-        tell [show id' ++ " is out-of-date because it is new"]
+        tell [T.pack $ show id' ++ " is out-of-date because it is new"]
         markOod id'
 
 
@@ -119,7 +120,7 @@ checkChangedPatterns = do
         if ls == ls'
             then return $ PatternDependency p ls : ds
             else do
-                tell [show id' ++ " is out-of-date because a pattern changed"]
+                tell [T.pack $ show id' ++ " is out-of-date because a pattern changed"]
                 markOod id'
                 return $ PatternDependency p ls' : ds
 
@@ -140,7 +141,7 @@ bruteForce = do
         case find (`S.member` ood) deps of
             Nothing -> return (id' : todo, changed)
             Just d  -> do
-                tell [show id' ++ " is out-of-date because " ++
+                tell [T.pack $ show id' ++ " is out-of-date because " ++
                     show d ++ " is out-of-date"]
                 markOod id'
                 return (todo, True)

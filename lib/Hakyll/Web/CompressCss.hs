@@ -10,6 +10,7 @@ module Hakyll.Web.CompressCss
 --------------------------------------------------------------------------------
 import           Data.Char               (isSpace)
 import           Data.List               (dropWhileEnd, isPrefixOf)
+import qualified Data.Text as T
 
 
 --------------------------------------------------------------------------------
@@ -20,8 +21,8 @@ import           Hakyll.Core.Util.String
 
 --------------------------------------------------------------------------------
 -- | Compiler form of 'compressCss'
-compressCssCompiler :: Compiler (Item String)
-compressCssCompiler = fmap compressCss <$> getResourceString
+compressCssCompiler :: Compiler (Item T.Text)
+compressCssCompiler = fmap (T.pack . compressCss . T.unpack) <$> getResourceString
 
 
 --------------------------------------------------------------------------------
